@@ -299,8 +299,8 @@ void RCSwitch::enableReceive()
 {
     if (this->nReceiverInterrupt != -1)
     {
-        RCSwitch::nReceivedValue = NULL;
-        RCSwitch::nReceivedBitlength = NULL;
+        RCSwitch::nReceivedValue = 0;
+        RCSwitch::nReceivedBitlength = 0;
         attachInterrupt(this->nReceiverInterrupt, handleInterrupt, CHANGE);
     }
 }
@@ -316,12 +316,12 @@ void RCSwitch::disableReceive()
 
 bool RCSwitch::available()
 {
-    return RCSwitch::nReceivedValue != NULL;
+    return RCSwitch::nReceivedValue != 0;
 }
 
 void RCSwitch::resetAvailable()
 {
-    RCSwitch::nReceivedValue = NULL;
+    RCSwitch::nReceivedValue = 0;
 }
 
 unsigned long long RCSwitch::getReceivedValue()
