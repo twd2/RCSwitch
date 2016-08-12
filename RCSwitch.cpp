@@ -185,7 +185,7 @@ void RCSwitch::send(unsigned long ulCode, unsigned int nLength)
     {
         for (unsigned int i = 0; i < nLength; ++i)
         {
-            if (((ulCode >> i) & 1) == 0)
+            if (((ulCode << i) & (1UL << 31)) == 0)
             {
                 this->send0();
             }
