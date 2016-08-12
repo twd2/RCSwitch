@@ -89,7 +89,7 @@ void RCSwitch::setPulseLength(int nPulseLength)
 /**
  * Sets Repeat Transmits
  */
-void RCSwitch::setRepeatTransmit(int nRepeatTransmit)
+void RCSwitch::setRepeatTransmit(unsigned int nRepeatTransmit)
 {
     this->nRepeatTransmit = nRepeatTransmit;
 }
@@ -105,7 +105,7 @@ void RCSwitch::setReceiveTolerance(int nPercent)
 /**
  * Enable transmissions
  *
- * @param nTransmitterPin    Arduino Pin to which the sender is connected to
+ * @param nTransmitterPin    Arduino Pin to which the transmitter is connected to
  */
 void RCSwitch::enableTransmit(int nTransmitterPin)
 {
@@ -124,75 +124,91 @@ void RCSwitch::disableTransmit()
 
 /**
  * Sends a Code Word
- * @param sCodeWord   /^[10FS]*$/  -> see getCodeWord
+ * @param sCodeWord   a tristate code word consisting of the letter 0, 1, F
  */
 void RCSwitch::sendTriState(char* sCodeWord) 
 {
-    for (int nRepeat=0; nRepeat < nRepeatTransmit; nRepeat++)
+    // turn the tristate code word into the corresponding bit pattern, then send it
+    unsigned long code = 0;
+    unsigned int length = 0;
+    for (const char* p = sCodeWord; *p; p++)
     {
-        int i = 0;
-        while (sCodeWord[i] != '\0') 
+        code <<= 2L;
+        switch (*p)
         {
-            switch(sCodeWord[i])
-            {
-                case '0':
-                    this->sendT0();
-                    break;
-                case 'F':
-                    this->sendTF();
-                    break;
-                case '1':
-                    this->sendT1();
-                    break;
-            }
-            i++;
+        case '0':
+            // bit pattern 00
+            break;
+        case 'F':
+            // bit pattern 01
+            code |= 0b01L;
+            break;
+        case '1':
+            // bit pattern 11
+            code |= 0b11L;
+            break;
         }
-        this->sendSync();
+        length += 2;
     }
+    this->send(code, length);
 }
 
 void RCSwitch::send(char* sCodeWord)
 {
-    for (int nRepeat=0; nRepeat < nRepeatTransmit; nRepeat++)
+    // turn the bistate code word into the corresponding bit pattern, then send it
+    unsigned long code = 0;
+    unsigned int length = 0;
+    for (const char* p = sCodeWord; *p; p++)
     {
-        int i = 0;
-        while (sCodeWord[i] != '\0') 
+        code <<= 1L;
+        if (*p != '0')
+            code |= 1L;
+        length++;
+    }
+    this->send(code, length);
+}
+
+void RCSwitch::send(unsigned long ulCode, unsigned int nLength)
+{
+    if (this->nTransmitterPin == -1)
+        return;
+
+    boolean disabledReceive = false;
+    int nReceiverInterrupt_backup = nReceiverInterrupt;
+    if (this->nReceiverInterrupt != -1)
+    {
+        this->disableReceive();
+        disabledReceive = true;
+    }
+
+    for (unsigned int nRepeat = 0; nRepeat < nRepeatTransmit; nRepeat++)
+    {
+        for (unsigned int i = 0; i < nLength; ++i)
         {
-            switch(sCodeWord[i])
+            if (((ulCode >> i) & 1) == 0)
             {
-                case '0':
-                    this->send0();
-                    break;
-                case '1':
-                    this->send1();
-                    break;
+                this->send0();
             }
-            i++;
+            else
+            {
+                this->send1();
+            }
         }
         this->sendSync();
+    }
+
+    if(disabledReceive)
+    {
+        this->enableReceive(nReceiverInterrupt_backup);
     }
 }
 
 void RCSwitch::transmit(int nHighPulses, int nLowPulses)
 {
-    boolean disabled_Receive = false;
-    int nReceiverInterrupt_backup = nReceiverInterrupt;
-    if (this->nTransmitterPin != -1)
-    {
-        if (this->nReceiverInterrupt != -1)
-        {
-            this->disableReceive();
-            disabled_Receive = true;
-        }
-        digitalWrite(this->nTransmitterPin, HIGH);
-        delayMicroseconds(this->nPulseLength * nHighPulses);
-        digitalWrite(this->nTransmitterPin, LOW);
-        delayMicroseconds(this->nPulseLength * nLowPulses);
-        if(disabled_Receive)
-        {
-            this->enableReceive(nReceiverInterrupt_backup);
-        }
-    }
+    digitalWrite(this->nTransmitterPin, HIGH);
+    delayMicroseconds(this->nPulseLength * nHighPulses);
+    digitalWrite(this->nTransmitterPin, LOW);
+    delayMicroseconds(this->nPulseLength * nLowPulses);
 }
 
 /**
@@ -206,11 +222,11 @@ void RCSwitch::send0()
 {
     if (this->nProtocol == 1)
     {
-        this->transmit(1,3);
+        this->transmit(1, 3);
     }
     else if (this->nProtocol == 2)
     {
-        this->transmit(1,2);
+        this->transmit(1, 2);
     }
 }
 
@@ -225,45 +241,12 @@ void RCSwitch::send1()
 {
     if (this->nProtocol == 1)
     {
-        this->transmit(3,1);
+        this->transmit(3, 1);
     }
     else if (this->nProtocol == 2)
     {
-        this->transmit(2,1);
+        this->transmit(2, 1);
     }
-}
-
-/**
- * Sends a Tri-State "0" Bit
- *            _     _
- * Waveform: | |___| |___
- */
-void RCSwitch::sendT0()
-{
-    this->transmit(1,3);
-    this->transmit(1,3);
-}
-
-/**
- * Sends a Tri-State "1" Bit
- *            ___   ___
- * Waveform: |   |_|   |_
- */
-void RCSwitch::sendT1()
-{
-    this->transmit(3,1);
-    this->transmit(3,1);
-}
-
-/**
- * Sends a Tri-State "F" Bit
- *            _     ___
- * Waveform: | |___|   |_
- */
-void RCSwitch::sendTF()
-{
-    this->transmit(1,3);
-    this->transmit(3,1);
 }
 
 /**
@@ -277,11 +260,11 @@ void RCSwitch::sendSync()
 {
     if (this->nProtocol == 1)
     {
-        this->transmit(1,31);
+        this->transmit(1, 31);
     }
     else if (this->nProtocol == 2)
     {
-        this->transmit(1,10);
+        this->transmit(1, 10);
     }
 }
 
